@@ -1,0 +1,51 @@
+### Installing Packages
+
+library(tidyverse)
+library(readr)
+library(janitor)
+library(ggplot2)
+library(RColorBrewer)
+
+### Loading up the data set about internet adoption
+Internet_Adoption <- read_csv("Internet_Master_Plan__Adoption_and_Infrastructure_Data_by_Neighborhood.csv")
+
+###Taking the spaces in column names
+Internet_Adoptions <- clean_names(Internet_Adoption)
+
+#### A Summary of the Dataset to see the amount of neighborhoods
+summary(Internet_Adoption)
+
+######Figuring out which Borough Has the Most Neighborhoods with below average household broadband adoption###############
+
+###Finding the mean for internet Adoption rate so we have a baseline for identifying neighborhoods with lower home broadband adoption percentages
+mean(Internet_Adoption$home_broadband_adoption_percentage_of_households) #0.6867692
+##Trying to filter out the neighborhoods with below average
+Internet_Adoption_Below_Avg <- filter(Internet_Adoptions, home_broadband_adoption_percentage_of_households < 0.6867692)
+
+#Selecting Columns of Interest: Neighborhoods with below average, borough,
+Internet_Adoption_Below_Avg_sum <- select(Internet_Adoption_Below_Avg, borough_name, home_broadband_adoption_percentage_of_households, total_number_of_households)
+Internet_Adoption_Below_Avg_sum <- group_by(Internet_Adoption_Below_Avg_sum, borough_name, .add = TRUE)
+Internet_Adoption_Below_Avg_sum <- Internet_Adoption_Below_Avg_sum %>%
+  group_by(borough_name) %>%
+  summarise(
+    precent_broadband_households = mean(home_broadband_adoption_percentage_of_households),
+    count_of_below_avg_neighborhoods = n(),
+    )
+## Creating a Bar Graph of Neighborhoods with Below Average Household Broadband Rates
+plot_below_avg<-ggplot(data = Internet_Adoption_Below_Avg_sum, aes(x = reorder(borough_name, -count_of_below_avg_neighborhoods), y = count_of_below_avg_neighborhoods, fill=borough_name)) +
+        geom_bar(stat="identity") +
+  geom_text(aes(label=count_of_below_avg_neighborhoods), vjust=2.0, color="white", size=3.5) +
+  scale_fill_manual(values = c("#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"))+
+  labs(
+    title = "Number of Neighborhoods with Below Average Household Broadband Rates",
+    subtitle = "Neighborhoods where less than 69% of households have broadband",
+    x = "Borough Name",
+    y = "Number of Neighborhoods",
+    caption = "Source: Internet Master Plan: Adoption and Infrastructure Data by Neighborhood, City Government, NYC OpenData",
+    fill="Borough Name"
+  ) +
+     theme_minimal()+
+  theme(legend.position="none", legend.title = element_blank(), plot.title = element_text(size=16), plot.caption = element_text(color="dimgrey", face = "italic"))
+
+plot_below_avg
+## color schemes (values=c("#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00") + theme_minimal())
