@@ -10,12 +10,15 @@ library(ggplot2)
 library(RColorBrewer)
 
 ### Loading up the data set about internet adoption
-Internet_Adoption <- read_csv("Internet_Master_Plan__Adoption_and_Infrastructure_Data_by_Neighborhood.csv")
 
+Internet_Adoption <- read_csv("Internet_Master_Plan__Adoption_and_Infrastructure_Data_by_Neighborhood.csv")
+#--------------------------------Cleaning and Wrangling Data----------------------
 ###Taking the spaces in column names
+
 Internet_Adoptions <- clean_names(Internet_Adoption)
 
 #### A Summary of the Dataset to see the amount of neighborhoods
+
 summary(Internet_Adoption)
 
 ######Figuring out which Borough Has the Most Neighborhoods with below average household broadband adoption###############
@@ -23,9 +26,11 @@ summary(Internet_Adoption)
 ###Finding the mean for internet Adoption rate so we have a baseline for identifying neighborhoods with lower home broadband adoption percentages
 mean(Internet_Adoption$home_broadband_adoption_percentage_of_households) #0.6867692
 ##Trying to filter out the neighborhoods with below average
+
 Internet_Adoption_Below_Avg <- filter(Internet_Adoptions, home_broadband_adoption_percentage_of_households < 0.6867692)
 
-#Selecting Columns of Interest: Neighborhoods with below average, borough,
+#Selecting Columns of Interest: Neighborhoods with below average, borough
+
 Internet_Adoption_Below_Avg_sum <- select(Internet_Adoption_Below_Avg, borough_name, home_broadband_adoption_percentage_of_households, total_number_of_households)
 Internet_Adoption_Below_Avg_sum <- group_by(Internet_Adoption_Below_Avg_sum, borough_name, .add = TRUE)
 Internet_Adoption_Below_Avg_sum <- Internet_Adoption_Below_Avg_sum %>%
@@ -34,7 +39,8 @@ Internet_Adoption_Below_Avg_sum <- Internet_Adoption_Below_Avg_sum %>%
     precent_broadband_households = mean(home_broadband_adoption_percentage_of_households),
     count_of_below_avg_neighborhoods = n(),
     )
-## Creating a Bar Graph of Neighborhoods with Below Average Household Broadband Rates
+#--------------------------------Creating Visualizations----------------------
+## FIGURE 1: Creating a Bar Graph of Neighborhoods with Below Average Household Broadband Rates
 plot_below_avg<-ggplot(data = Internet_Adoption_Below_Avg_sum, aes(x = reorder(borough_name, -count_of_below_avg_neighborhoods), y = count_of_below_avg_neighborhoods, fill=borough_name)) +
         geom_bar(stat="identity") +
   geom_text(aes(label=count_of_below_avg_neighborhoods), vjust=2.0, color="white", size=3.5) +
@@ -52,3 +58,107 @@ plot_below_avg<-ggplot(data = Internet_Adoption_Below_Avg_sum, aes(x = reorder(b
 
 plot_below_avg
 ## color schemes (values=c("#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00") + theme_minimal())
+
+### FIGURE 2: Figuring out the total number of households in each borough that do not have broadband.
+
+Internet_Adoption_sum <- select(Internet_Adoptions, borough_name, home_broadband_adoption_percentage_of_households, total_number_of_households, mobile_dependent_households_percentage_of_households)
+Internet_Adoption_sum <- group_by(Internet_Adoption_sum, borough_name, .add = TRUE) %>%
+  summarise(
+    total_households_1 = sum(total_number_of_households),
+    precent_broadband_households = mean(home_broadband_adoption_percentage_of_households),
+    precent_mobile_households = mean(mobile_dependent_households_percentage_of_households)
+  )
+
+Internet_Adoption_sum <- Internet_Adoption_sum %>%
+  mutate(Internet_Adoption_sum,
+         total_households_with = (total_households_1*precent_broadband_households),
+         total_housholds_without = (total_households_1 - total_households_with),
+         total_mobile_households = (precent_mobile_households*total_households_1)) %>%
+  select(borough_name, total_households_with, total_housholds_without, total_mobile_households) %>%
+  #Pivot table to prep for stacked bar
+  pivot_longer(!borough_name,
+               names_to = "Type",
+               values_to = "value",
+               values_drop_na = TRUE)
+
+## FIGURE 3: Graphing the type of internet access families have.
+
+plot_internet <- ggplot(Internet_Adoption_sum, aes(fill=Type, y=value, x=borough_name)) +
+ geom_bar(position= "dodge", stat="identity", alpha=1.5) +
+ scale_fill_manual(values=c("#66c2a5", "#fc8d62", "#8da0cb"),
+                   labels=c("With Broadband", "Without Broadband", "Mobile Dependent")) +
+ scale_y_continuous(labels=scales::comma)+
+ labs(title="Households with and Without Broadband",
+      x="Borough Name",
+      y="Number of Households",
+      caption = "Source: Internet Master Plan: Adoption and Infrastructure Data by Neighborhood, City Government, NYC OpenData") +
+ theme_minimal() +
+ theme(legend.title = element_blank(), plot.title = element_text(size=16), plot.caption = element_text(color="dimgrey", face="italic"))
+
+plot_internet
+
+## Doing data analysis about the amount of free wifi hotspots are in each neighborhood.
+
+Internet_Adoption_Free<- select(Internet_Adoptions, neighborhood_tabulation_area_name_nta_name, borough_name, home_broadband_adoption_percentage_of_households, total_number_of_households, public_wi_fi_in_nyc_count, area_sq_mi)
+
+Internet_Adoption_Free<- group_by(Internet_Adoption_Free, neighborhood_tabulation_area_name_nta_name) %>%
+  summarise(precent_broadband_households = mean(home_broadband_adoption_percentage_of_households),
+    free_wifi = sum(public_wi_fi_in_nyc_count),
+    na_if(free_wifi, 0),
+    na_if(precent_broadband_households, 0.00),
+    wifi_per_sq_mile = (public_wi_fi_in_nyc_count/area_sq_mi),
+    borough=first(borough_name)
+    )%>%
+  drop_na()
+
+  ### Defining scatterplot colors
+
+  colors <-c("Bronx" ="#e41a1c", "Brooklyn" ="#377eb8", "Manhattan"= "#4daf4a","Queens"= "#984ea3", "Staten Island"="#ff7f00")
+
+  ## FIGURE 4: Creating the first scatter plot. This one shows the precent of households with broadband vs. the number of public free WiFi hotspot.
+
+  scatter_1<-ggplot(Internet_Adoption_Free,aes(x = free_wifi, y = precent_broadband_households)) +
+    geom_point(aes(x = free_wifi, y = precent_broadband_households, color=borough)) +
+    scale_color_manual(values = colors) +
+    geom_smooth(method=lm, se=FALSE, color="dimgrey") +
+    #scale_y_continuous(labels = percent)+
+    labs(
+      title = "Precent of Households with Broadband vs. Number of Public Free WiFi Hotspots",
+      x = "Number of Public Free Wifi Hotspots in the Neighborhood",
+      y= "Precent of Households with Broadband",
+      caption = "Source: Internet Master Plan: Adoption and Infrastructure Data by Neighborhood, City Government, NYC OpenData"
+    ) +
+    theme_minimal()+
+    theme(legend.position = "none", plot.caption = element_text(color = "dimgrey", face = "italic", size = 9), plot.title = element_text(size =18))
+  scatter_1
+
+  ## FIGURE 5: Creating the second scatter plot. This one shows breaked up the scatter plot of the precent of households with broadband vs. the number of public free WiFi hotspot by borough.
+
+  scatter_2 <- ggplot(Internet_Adoption_Free, aes(x = free_wifi, y = precent_broadband_households, fill=borough)) +
+    geom_point(aes(x = free_wifi, y = precent_broadband_households, color=borough)) +
+      scale_color_manual(values = colors) +
+    geom_smooth(method=lm, se=FALSE, color="dimgrey") +
+    #scale_y_continuous(labels = percent) +
+    labs(
+      title = "The Precent of Households with Broadband vs. The Number of Public Free WiFi Options",
+      x = "Number of Public Free Wifi Hotspots in the Neighborhood",
+      y= "Precent of Households with Broadband",
+    caption = "Source: Internet Master Plan: Adoption and Infrastructure Data by Neighborhood, City Government, NYC OpenData") +
+    facet_grid(cols = vars(borough))+
+    theme_minimal()+
+    theme(legend.position = "none", plot.caption = element_text(color = "dimgrey", face = "italic", size = 9), plot.title = element_text(size =18))
+  scatter_2
+
+## FIGURE 6: This graph shows the total free wifi hotspots in each borough. This was not included in the blog.
+
+free_wifi_sum <- select(Internet_Adoptions, borough_name, public_wi_fi_in_nyc_count) %>%
+  group_by(borough_name)%>%
+  summarise(public_count =sum(public_wi_fi_in_nyc_count))
+
+
+ggplot(free_wifi_sum, aes(x=reorder(borough_name, -public_count), y=public_count, fill=borough_name))+
+  geom_bar(stat="identity", color = colors)+
+  labs(
+    x = "Borough Name",
+    y = "Number of Public WiFi Hotspots"
+  )
